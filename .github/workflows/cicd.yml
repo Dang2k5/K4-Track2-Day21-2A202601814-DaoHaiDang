@@ -36,11 +36,7 @@ jobs:
     outputs:
       f1: ${{ steps.read_report.outputs.f1 }}
     env:
-      STORAGE_CREDENTIALS: ${{ secrets.STORAGE_CREDENTIALS }}
       ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
       - uses: actions/checkout@v4
 
@@ -52,58 +48,11 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Authenticate to Amazon S3
-        run: |
-          python - <<'PYEOF'
-          import json
-          import os
-
-          credentials = os.environ.get("STORAGE_CREDENTIALS", "").strip()
-          values = {}
-          if credentials:
-              try:
-                  values = json.loads(credentials)
-              except json.JSONDecodeError as exc:
-                  raise SystemExit("STORAGE_CREDENTIALS must contain valid AWS JSON") from exc
-
-          access_key = (
-              os.environ.get("AWS_ACCESS_KEY_ID")
-              or values.get("aws_access_key_id")
-              or values.get("AccessKeyId")
-              or values.get("AWS_ACCESS_KEY_ID")
-          )
-          secret_key = (
-              os.environ.get("AWS_SECRET_ACCESS_KEY")
-              or values.get("aws_secret_access_key")
-              or values.get("SecretAccessKey")
-              or values.get("AWS_SECRET_ACCESS_KEY")
-          )
-          session_token = (
-              os.environ.get("AWS_SESSION_TOKEN")
-              or values.get("aws_session_token")
-              or values.get("SessionToken")
-              or values.get("AWS_SESSION_TOKEN")
-          )
-          region = (
-              os.environ.get("AWS_DEFAULT_REGION")
-              or values.get("region")
-              or values.get("aws_region")
-              or "ap-southeast-1"
-          )
-
-          if not access_key or not secret_key:
-              raise SystemExit(
-                  "Missing AWS credentials. Set STORAGE_CREDENTIALS as JSON or set both "
-                  "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY repository secrets."
-              )
-
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-              env_file.write(f"AWS_ACCESS_KEY_ID={access_key}\n")
-              env_file.write(f"AWS_SECRET_ACCESS_KEY={secret_key}\n")
-              env_file.write(f"AWS_DEFAULT_REGION={region}\n")
-              if session_token:
-                  env_file.write(f"AWS_SESSION_TOKEN={session_token}\n")
-          print("AWS credentials loaded; secret values are not printed.")
-          PYEOF
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Verify S3 access
         run: |

@@ -1,4 +1,5 @@
 [core]
     remote = labstore
-['remote "labstore"']
+    site_cache_dir = .dvc/site-cache
+[remote "labstore"]
     url = s3://dang2k5/dvc

@@ -1,8 +1,8 @@
 import os
 
+import boto3
 import joblib
 from fastapi import FastAPI, HTTPException
-from google.cloud import storage
 from pydantic import BaseModel
 
 
@@ -20,11 +20,10 @@ def download_model() -> None:
         os.makedirs(model_directory, exist_ok=True)
 
     if ARTIFACT_BUCKET:
-        client = storage.Client()
-        bucket = client.bucket(ARTIFACT_BUCKET)
-        blob = bucket.blob(MODEL_KEY)
-        blob.download_to_filename(MODEL_PATH)
-        print("Model da duoc tai xuong tu cloud storage.")
+        region = os.getenv("AWS_DEFAULT_REGION") or os.getenv("AWS_REGION")
+        client = boto3.client("s3", region_name=region)
+        client.download_file(ARTIFACT_BUCKET, MODEL_KEY, MODEL_PATH)
+        print("Model da duoc tai xuong tu Amazon S3.")
         return
 
     # This fallback makes local API smoke tests possible. Production sets the bucket.

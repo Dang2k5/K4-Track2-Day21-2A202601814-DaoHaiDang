@@ -58,37 +58,78 @@ jobs:
           import os
 
           credentials = os.environ.get("STORAGE_CREDENTIALS", "").strip()
+          values = {}
           if credentials:
               try:
                   values = json.loads(credentials)
               except json.JSONDecodeError as exc:
                   raise SystemExit("STORAGE_CREDENTIALS must contain valid AWS JSON") from exc
-              access_key = values.get("aws_access_key_id") or values.get("AccessKeyId")
-              secret_key = values.get("aws_secret_access_key") or values.get("SecretAccessKey")
-              region = values.get("region") or values.get("aws_region")
-              if not access_key or not secret_key:
-                  raise SystemExit(
-                      "STORAGE_CREDENTIALS JSON needs aws_access_key_id and aws_secret_access_key"
-                  )
-              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-                  env_file.write(f"AWS_ACCESS_KEY_ID={access_key}\n")
-                  env_file.write(f"AWS_SECRET_ACCESS_KEY={secret_key}\n")
-                  if region:
-                      env_file.write(f"AWS_DEFAULT_REGION={region}\n")
 
-          if not os.environ.get("AWS_ACCESS_KEY_ID") and not credentials:
+          access_key = (
+              os.environ.get("AWS_ACCESS_KEY_ID")
+              or values.get("aws_access_key_id")
+              or values.get("AccessKeyId")
+              or values.get("AWS_ACCESS_KEY_ID")
+          )
+          secret_key = (
+              os.environ.get("AWS_SECRET_ACCESS_KEY")
+              or values.get("aws_secret_access_key")
+              or values.get("SecretAccessKey")
+              or values.get("AWS_SECRET_ACCESS_KEY")
+          )
+          session_token = (
+              os.environ.get("AWS_SESSION_TOKEN")
+              or values.get("aws_session_token")
+              or values.get("SessionToken")
+              or values.get("AWS_SESSION_TOKEN")
+          )
+          region = (
+              os.environ.get("AWS_DEFAULT_REGION")
+              or values.get("region")
+              or values.get("aws_region")
+              or "ap-southeast-1"
+          )
+
+          if not access_key or not secret_key:
               raise SystemExit(
-                  "Configure STORAGE_CREDENTIALS JSON or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY secrets"
+                  "Missing AWS credentials. Set STORAGE_CREDENTIALS as JSON or set both "
+                  "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY repository secrets."
               )
+
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-              if not os.environ.get("AWS_DEFAULT_REGION"):
-                  env_file.write("AWS_DEFAULT_REGION=ap-southeast-1\n")
+              env_file.write(f"AWS_ACCESS_KEY_ID={access_key}\n")
+              env_file.write(f"AWS_SECRET_ACCESS_KEY={secret_key}\n")
+              env_file.write(f"AWS_DEFAULT_REGION={region}\n")
+              if session_token:
+                  env_file.write(f"AWS_SESSION_TOKEN={session_token}\n")
+          print("AWS credentials loaded; secret values are not printed.")
+          PYEOF
+
+      - name: Verify S3 access
+        run: |
+          python - <<'PYEOF'
+          import os
+          import boto3
+
+          bucket = os.environ.get("ARTIFACT_BUCKET", "").strip()
+          if not bucket or bucket.startswith("s3://") or "/" in bucket:
+              raise SystemExit(
+                  "ARTIFACT_BUCKET must be the bucket name only, for example: dang2k5"
+              )
+          region = os.environ.get("AWS_DEFAULT_REGION", "ap-southeast-1")
+          client = boto3.client("s3", region_name=region)
+          result = client.list_objects_v2(Bucket=bucket, Prefix="dvc/", MaxKeys=1)
+          if not result.get("Contents"):
+              raise SystemExit(
+                  f"S3 bucket '{bucket}' has no DVC objects under dvc/. Run dvc push locally first."
+              )
+          print(f"S3 access OK: s3://{bucket}/dvc/")
           PYEOF
 
       - name: Pull data with DVC
         run: |
           dvc remote add --force -d labstore "s3://${ARTIFACT_BUCKET}/dvc"
-          dvc pull data/train_batch1.csv.dvc data/holdout.csv.dvc
+          dvc pull -v data/train_batch1.csv.dvc data/holdout.csv.dvc
 
       - name: Train model
         run: python src/train.py
